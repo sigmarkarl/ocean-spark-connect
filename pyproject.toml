@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "ocean-spark-connect"
+version = "0.1.7"
+description = ""
+authors = ["Sigmar Stefansson <sigmar@netapp.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyspark = "^3.4.1"
+websockets = "^11.0.3"
+pandas = "^2.0.3"
+pyarrow = "^12.0.1"
+grpcio = "^1.57.0"
+googleapis-common-protos = "^1.60.0"
+grpcio-status = "^1.57.0"
+
+[tool.setuptools.packages.find]
+where = ["ocean_spark_connect"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
