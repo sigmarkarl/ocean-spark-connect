@@ -1,4 +1,4 @@
-## Wrapper to create Spark Connect session for Applications in Ocean
+## Wrapper to create Spark Connect session for Spark Applications in Ocean
 
 ```
 spark = OceanSparkSession.Builder().cluster_id("osc-cluster").appid("appid").profile("default").getOrCreate()
