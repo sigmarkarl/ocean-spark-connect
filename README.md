@@ -8,11 +8,11 @@ spark.stop()
 
 ### Options for OceanSparkSession.Builder with and without default values
 
-token
-profile
-appId
-accountId
-clusterId
-host = "api.spotinst.io"
-port = "15002"
-bindAddress = "0.0.0.0"
+* token
+* profile
+* appId
+* accountId
+* clusterId
+* host = "api.spotinst.io"
+* port = "15002"
+* bindAddress = "0.0.0.0"
