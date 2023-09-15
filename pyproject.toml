@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ocean-spark-connect"
-version = "0.1.7"
+version = "0.1.8"
 description = ""
 authors = ["Sigmar Stefansson <sigmar@netapp.com>"]
 readme = "README.md"

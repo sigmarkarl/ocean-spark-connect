@@ -120,10 +120,4 @@ class OceanSparkSession(RemoteSparkSession):
 
             url = f"sc://localhost:{self._port}"
             return OceanSparkSession(connectionString=url)
-
-
-if __name__ == "__main__":
-    spark = OceanSparkSession.Builder().cluster_id("osc-239fd6f0").appid("spark-connect-7cea8-havoc").profile("default").config("spark.jars.ivy", "/tmp").getOrCreate()
-    spark.sql("select random()").show()
-    spark.stop()
     
