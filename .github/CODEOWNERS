@@ -4,5 +4,6 @@
 # the repo. Unless a later match takes precedence,
 # “Spark-infrastructure-team” team members will be requested for
 # review when someone opens a pull request.
-/.github/   @Spotinst/team-bigdata-devops
-*           @Spotinst/team-bigdata
+/.github/       @Spotinst/team-bigdata-devops
+/pyproject.toml @Spotinst/team-bigdata-team-leads
+*               @Spotinst/team-bigdata
