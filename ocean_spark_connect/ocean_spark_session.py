@@ -119,7 +119,7 @@ class OceanSparkSession(RemoteSparkSession):
                 _my_thread.start()
 
             url = f"sc://localhost:{self._port}"
-            return OceanSparkSession(connectionString=url)
+            return OceanSparkSession(connection=url)
 
 
 if __name__ == "__main__":
