@@ -3,7 +3,9 @@ import os
 import threading
 from asyncio import AbstractEventLoop
 
+from pyspark import SparkContext
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+from pyspark.sql import SparkSession as SparkSession
 from ocean_spark_connect.inverse_websockify import Proxy
 
 
@@ -27,6 +29,7 @@ def load_profiles():
 
 _loop: AbstractEventLoop = None
 _my_thread: threading.Thread = None
+_jspark: SparkSession = None
 
 
 class OceanSparkSession(RemoteSparkSession):
@@ -35,6 +38,8 @@ class OceanSparkSession(RemoteSparkSession):
             _loop.stop()
         if _my_thread is not None:
             _my_thread.join()
+        if _jspark is not None:
+            _jspark.stop()
         super().stop()
     
     class Builder(RemoteSparkSession.Builder):
@@ -44,12 +49,17 @@ class OceanSparkSession(RemoteSparkSession):
         _appId: str = None
         _accountId = None
         _clusterId = None
+        _jvm = False
         _host = "api.spotinst.io"
         _port = "15002"
         _bindAddress = "0.0.0.0"
 
         def __init__(self):
             super().__init__()
+            
+        def usejava(self, value):
+            self._jvm = value
+            return self
 
         def appid(self, value):
             self._appId = value
@@ -89,7 +99,6 @@ class OceanSparkSession(RemoteSparkSession):
             loop.run_forever()
 
         def getOrCreate(self):
-            global _loop, _my_thread
             profile_map = load_profiles()
             if self._appId is None:
                 raise Exception("appId is required")
@@ -111,15 +120,31 @@ class OceanSparkSession(RemoteSparkSession):
                     if self._profile not in profile_map:
                         raise Exception(f"Profile {self._profile} not found")
                     self._accountId = profile_map[self._profile]["account"]
-
-            if _loop is None:
-                url = f"wss://{self._host}/ocean/spark/cluster/{self._clusterId}/app/{self._appId}/connect?accountId={self._accountId}"
-                _loop = asyncio.get_event_loop()
-                _my_thread = threading.Thread(target=self.inverse_websockify, args=(url, _loop))
-                _my_thread.start()
+                    
+            if self._jvm:
+                _jspark = SparkSession.builder.master("local[1]") \
+                    .config("spark.jars.repositories", "https://us-central1-maven.pkg.dev/ocean-spark/ocean-spark-adapters") \
+                    .config("spark.jars.packages", "com.netapp.spark:clientplugin:1.2.1") \
+                    .config("spark.jars.excludes", "org.glassfish:javax.el,log4j:log4j") \
+                    .config("spark.plugins", "com.netapp.spark.SparkConnectWebsocketTranscodePlugin") \
+                    .config("spark.code.submission.clusterId", f"{self._clusterId}") \
+                    .config("spark.code.submission.accountId", f"{self._accountId}") \
+                    .config("spark.code.submission.appId", f"{self._appId}") \
+                    .config("spark.code.submission.token", f"{self._token}") \
+                    .config("spark.code.submission.ports", f"{self._port}") \
+                    .getOrCreate()
+                SparkContext._active_spark_context = None
+                SparkSession._instantiatedSession = None
+            else:
+                global _loop, _my_thread
+                if _loop is None:
+                    url = f"wss://{self._host}/ocean/spark/cluster/{self._clusterId}/app/{self._appId}/connect?accountId={self._accountId}"
+                    _loop = asyncio.get_event_loop()
+                    _my_thread = threading.Thread(target=self.inverse_websockify, args=(url, _loop))
+                    _my_thread.start()
 
             url = f"sc://localhost:{self._port}"
-            return OceanSparkSession(connection=url)
+            return OceanSparkSession(url)
 
 
 if __name__ == "__main__":
