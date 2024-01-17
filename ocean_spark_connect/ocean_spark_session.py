@@ -31,6 +31,7 @@ def load_profiles():
     return profile_map
 
 
+_proxy: Proxy = None
 _loop: AbstractEventLoop = None
 _my_thread: threading.Thread = None
 _jspark: SparkSession = None
@@ -134,15 +135,22 @@ class OceanSparkSession(RemoteSparkSession):
         try:
             super().stop()
         finally:
-            if _loop is not None:
-                _loop.stop()
+            global _loop, _my_thread, _jspark, _proxy
+            if _proxy is not None:
+                serv = _proxy.stop()
+                if serv is not None:
+                    future = asyncio.run_coroutine_threadsafe(serv.wait_closed(), _loop)
+                    future.result()
+                _proxy = None
             if _my_thread is not None:
+                _loop.call_soon_threadsafe(_loop.stop)
                 _my_thread.join()
+                _my_thread = None
             if _jspark is not None:
                 _jspark.stop()
+                _jspark = None
 
     class Builder(RemoteSparkSession.Builder):
-        _proxy: Proxy = None
         _token: str = None
         _profile: str = None
         _appId: str = None
@@ -198,12 +206,16 @@ class OceanSparkSession(RemoteSparkSession):
             return self
 
         def inverse_websockify(self, url: str) -> None:
-            global _loop
+            global _loop, _proxy
             _loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(_loop)
-            proxy = Proxy(url, self._token, self._port, self._bindAddress)
-            _loop.run_until_complete(proxy.start())
-            _loop.run_forever()
+            #asyncio.set_event_loop(_loop)
+            _proxy = Proxy(url, self._token, self._port, self._bindAddress)
+            _loop.run_until_complete(_proxy.start())
+            try:
+                _loop.run_forever()
+            finally:
+                _loop.close()
+                _loop = None
 
         def getOrCreate(self):
             profile_map = load_profiles()
@@ -228,6 +240,7 @@ class OceanSparkSession(RemoteSparkSession):
                         self._accountId = profile_map[self._profile]["account"]
 
                 if self._jvm:
+                    global _jspark
                     _jspark = SparkSession.builder.master("local[1]") \
                         .config("spark.jars.repositories", "https://us-central1-maven.pkg.dev/ocean-spark/ocean-spark-adapters") \
                         .config("spark.jars.packages", "com.netapp.spark:clientplugin:1.2.1") \

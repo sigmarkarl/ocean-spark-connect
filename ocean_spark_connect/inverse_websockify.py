@@ -46,7 +46,7 @@ import sys
 import asyncio
 import websockets
 
-from typing import Any, List
+from typing import Any, List, Set
 
 
 class Proxy:
@@ -55,9 +55,12 @@ class Proxy:
         self.addr = addr
         self.token = token
         self.url = url
+        self.done = False
+        self.writer = None
+        self.loop = None
 
     async def copy(self, reader: Any, writer: Any) -> None:
-        while True:
+        while not self.done:
             data = await reader()
             if data == b"":
                 break
@@ -68,7 +71,7 @@ class Proxy:
     async def handle_client(self, r: Any, w: Any) -> None:
         peer = w.get_extra_info("peername")
         print(f"{peer} connected")
-        loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_event_loop()
         try:
             async with websockets.connect(
                 self.url,
@@ -76,12 +79,14 @@ class Proxy:
                 extra_headers={"Authorization": f"Bearer {self.token}"},
             ) as ws:
                 print(f"{peer} connected to {self.url}")
-
+                self.wbsct = ws
                 def r_reader() -> Any:
                     return r.read(65536)
 
-                tcp_to_ws = loop.create_task(self.copy(r_reader, ws.send))
-                ws_to_tcp = loop.create_task(self.copy(ws.recv, w.write))
+                self.writer = w
+
+                tcp_to_ws = self.loop.create_task(self.copy(r_reader, ws.send))
+                ws_to_tcp = self.loop.create_task(self.copy(ws.recv, w.write))
                 done, pending = await asyncio.wait(
                     [tcp_to_ws, ws_to_tcp], return_when=asyncio.FIRST_COMPLETED
                 )
@@ -97,8 +102,20 @@ class Proxy:
         w.close()
         print(f"{peer} closed")
 
+    def stop(self) -> Any:
+        self.done = True
+        if self.loop is not None:
+            if self.writer is not None:
+                self.writer.close()
+            self.loop.stop()
+            self.server = None
+            return None
+        elif self.server is not None:
+            self.server.close()
+            return self.server
+
     async def start(self) -> None:
-        await asyncio.start_server(self.handle_client, self.addr, self.port)
+        self.server = await asyncio.start_server(self.handle_client, self.addr, self.port)
         print(f"Listening on {self.addr} port {self.port}")
 
 
