@@ -158,11 +158,11 @@ class OceanSparkSession(RemoteSparkSession):
         try:
             super().stop()
         finally:
-            if self._bind_address.startswith("/"):
-                os.unlink(self._bind_address)
             if self._my_process is not None:
                 self._my_process.kill()
                 self._my_process = None
+            if self._bind_address.startswith("/"):
+                os.unlink(self._bind_address)
             elif self._jspark is not None:
                 self._jspark.stop()
                 self._jspark = None
@@ -275,33 +275,22 @@ class OceanSparkSession(RemoteSparkSession):
 
 if __name__ == "__main__":
     spark_0 = None
-    spark_1 = None
     try:
         spark_0 = OceanSparkSession.Builder() \
-            .host("localhost:8091") \
-            .scheme("ws") \
             .cluster_id("osc-739db584") \
-            .appid("spark-connect-60f4b-teams") \
-            .profile("default") \
-            .getOrCreate()
-
-        spark_1 = OceanSparkSession.Builder() \
-            .host("localhost:8091") \
-            .scheme("ws") \
-            .cluster_id("osc-739db584") \
-            .appid("spark-connect-60f4b-teams") \
+            .appid("spark-connect-40982-foxes") \
             .profile("default") \
             .getOrCreate()
 
         spark_0.sql("select random()").show()
-        spark_1.sql("select random()").show()
+        spark_0.stop()
         # spark = OceanSparkSession.Builder().getOrCreate()
         # spark.ai("create a dataframe of random gaussian distributed numbers using pyspark. the length of the new dataframe should be 10000").show()
         # spark.ai("from the jaffle schema, select all columns in the customers table and generate a random gender").show()
         # spark.ai("show me the names of the tables joined with their column names in the jaffle schema").show()
         # asyncio.all_tasks()
     finally:
-        if spark_0 is not None:
-            spark_0.stop()
-        if spark_1 is not None:
-            spark_1.stop()
+        print("erm", file=sys.stderr)
+        #    print("erm", file=sys.stderr)
+        #    if spark_0 is not None:
+        #        spark_0.stop()

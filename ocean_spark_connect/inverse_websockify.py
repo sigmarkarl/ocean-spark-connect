@@ -65,7 +65,7 @@ class Proxy:
         self.loop = None
 
     def inverse_websockify(self) -> None:
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.new_event_loop()
         self.loop.run_until_complete(self.start())
         self.loop.run_forever()
 
