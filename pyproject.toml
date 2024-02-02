@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ocean-spark-connect"
-version = "0.3.2"
+version = "0.3.3"
 description = "Spark Connect adapter for Ocean Spark"
 authors = ["Sigmar Stefansson <sigmar@netapp.com>"]
 readme = "README.md"
