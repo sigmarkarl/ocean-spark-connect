@@ -1,16 +1,20 @@
-import asyncio
+import multiprocessing
 import os
 import sys
 import subprocess
-import threading
 import traceback
-from asyncio import AbstractEventLoop
+from multiprocessing import Process
 
+import grpc
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
+from pyspark.sql.connect.client import ChannelBuilder
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 from pyspark.sql import SparkSession as SparkSession
 from ocean_spark_connect.inverse_websockify import Proxy
+
+
+multiprocessing.set_start_method("fork", force=True)
 
 
 def load_profiles():
@@ -31,48 +35,67 @@ def load_profiles():
     return profile_map
 
 
-_proxy: Proxy = None
-_loop: AbstractEventLoop = None
-_my_thread: threading.Thread = None
-_jspark: SparkSession = None
-
 teststr = """
 python -c "from pyspark.sql.types import DoubleType; from pyspark.sql.functions import rand; spark.range(10000).select(rand().alias('value')).toPandas()"
 """
 
-class OceanSparkSession(RemoteSparkSession):
-    def _run_gh_process(self, query: str):
-        process = subprocess.Popen(["gh", "copilot", "suggest", "-t", "shell", query + ""], stdout=subprocess.PIPE)
-        cmd = "select random()"
-        while True:
+
+class OceanChannelBuilder(ChannelBuilder):
+    def __init__(self, url: str, bind_address: str):
+        super().__init__(url)
+        self._bind_address = bind_address
+
+    def toChannel(self) -> grpc.Channel:
+        if self._bind_address.startswith("/"):
+            channel = grpc.insecure_channel("unix://" + self._bind_address)
+        else:
+            channel = grpc.insecure_channel(self.url)
+        return channel
+
+
+def _run_gh_process(query: str):
+    process = subprocess.Popen(["gh", "copilot", "suggest", "-t", "shell", query + ""], stdout=subprocess.PIPE)
+    cmd = "select random()"
+    while True:
+        line = process.stdout.readline()
+        if not line:
+            break
+        line = line.decode("utf-8").strip()
+        print(line)
+        if line.startswith("# Suggestion:"):
             line = process.stdout.readline()
-            if not line:
-                break
             line = line.decode("utf-8").strip()
-            print(line)
-            if line.startswith("# Suggestion:"):
+            while line == "":
                 line = process.stdout.readline()
                 line = line.decode("utf-8").strip()
-                while line == "":
-                    line = process.stdout.readline()
-                    line = line.decode("utf-8").strip()
-                total = ""
-                while line != "":
-                    total += line + "\n"
-                    line = process.stdout.readline()
-                    line = line.decode("utf-8").strip()
+            total = ""
+            while line != "":
+                total += line + "\n"
+                line = process.stdout.readline()
+                line = line.decode("utf-8").strip()
 
-                cmd = total.strip()
+            cmd = total.strip()
 
-                #if not line.startswith("from ") and not line.startswith("import "):
-                #    if "spark." in line or line.startswith("spark-sql -e ") or line.startswith(
-                #            "SELECT") or line.startswith("select"):
-                print("attempt to parse: " + line)
-            elif "? Select" in line or "Suggestion not readily available" in line:
-                break
- 
-        process.terminate()
-        return cmd
+            # if not line.startswith("from ") and not line.startswith("import "):
+            #    if "spark." in line or line.startswith("spark-sql -e ") or line.startswith(
+            #            "SELECT") or line.startswith("select"):
+            print("attempt to parse: " + line)
+        elif "? Select" in line or "Suggestion not readily available" in line:
+            break
+
+    process.terminate()
+    return cmd
+
+
+class OceanSparkSession(RemoteSparkSession):
+    def __init__(self, connection: ChannelBuilder,
+                 jspark: SparkSession | None,
+                 my_process: Process | None,
+                 bind_address: str):
+        super().__init__(connection, None)
+        self._jspark = jspark
+        self._my_process = my_process
+        self._bind_address = bind_address
 
     def parseCmd(self, cmd: str) -> DataFrame:
         if cmd.startswith("SELECT ") or cmd.startswith("select "):
@@ -89,10 +112,10 @@ class OceanSparkSession(RemoteSparkSession):
             suff = cmd[i:].strip()
             pref = cmd[:i].strip()
             if pref != "":
-                #exec(pref)
+                # exec(pref)
                 try:
                     sparkcmd = "self." + suff[6:]
-                    #df = self.eval(sparkcmd)
+                    # df = self.eval(sparkcmd)
                     df = eval(sparkcmd)
                     if type(df).__name__ == 'DataFrame':
                         return df
@@ -100,14 +123,14 @@ class OceanSparkSession(RemoteSparkSession):
                         raise Exception("The result of the command is not a pyspark dataframe")
                 except Exception as e:
                     _, _, tb = sys.exc_info()
-                    traceback.print_tb(tb) # Fixed format
+                    traceback.print_tb(tb)  # Fixed format
                     tb_info = traceback.extract_tb(tb)
                     filename, line, func, text = tb_info[-1]
-                
+
                     print('An error occurred on line {} in statement {}'.format(line, text))
                     exit(1)
-                    #print(f"error running command {cmd}: {e}")
-                    #raise e
+                    # print(f"error running command {cmd}: {e}")
+                    # raise e
             cmd = "self." + suff[6:]
         elif cmd.startswith("spark-sql -e "):
             sql = cmd[14:-1]
@@ -125,7 +148,7 @@ class OceanSparkSession(RemoteSparkSession):
             raise e
 
     def ai(self, query: str) -> DataFrame:
-        cmd = teststr.strip() #self._run_gh_process(query)
+        cmd = teststr.strip()  # self._run_gh_process(query)
         if cmd != "":
             return self.parseCmd(cmd)
         else:
@@ -135,20 +158,14 @@ class OceanSparkSession(RemoteSparkSession):
         try:
             super().stop()
         finally:
-            global _loop, _my_thread, _jspark, _proxy
-            if _proxy is not None:
-                serv = _proxy.stop()
-                if serv is not None:
-                    future = asyncio.run_coroutine_threadsafe(serv.wait_closed(), _loop)
-                    future.result()
-                _proxy = None
-            if _my_thread is not None:
-                _loop.call_soon_threadsafe(_loop.stop)
-                _my_thread.join()
-                _my_thread = None
-            if _jspark is not None:
-                _jspark.stop()
-                _jspark = None
+            if self._bind_address.startswith("/"):
+                os.unlink(self._bind_address)
+            if self._my_process is not None:
+                self._my_process.kill()
+                self._my_process = None
+            elif self._jspark is not None:
+                self._jspark.stop()
+                self._jspark = None
 
     class Builder(RemoteSparkSession.Builder):
         _token: str = None
@@ -157,15 +174,16 @@ class OceanSparkSession(RemoteSparkSession):
         _accountId = None
         _clusterId = None
         _jvm = False
+        _channel_builder = False
         _scheme = "wss"
         _host = "api.spotinst.io"
-        _port = "15002"
-        _bindAddress = "0.0.0.0"
+        _port = "-1"
+        _bind_address = "0.0.0.0"
 
         def __init__(self):
             super().__init__()
 
-        def usejava(self, value):
+        def use_java(self, value):
             self._jvm = value
             return self
 
@@ -194,28 +212,16 @@ class OceanSparkSession(RemoteSparkSession):
             return self
 
         def bind_address(self, value):
-            self._bindAddress = value
+            self._bind_address = value
             return self
 
         def host(self, value):
             self._host = value
             return self
-        
+
         def scheme(self, value):
             self._scheme = value
             return self
-
-        def inverse_websockify(self, url: str) -> None:
-            global _loop, _proxy
-            _loop = asyncio.new_event_loop()
-            #asyncio.set_event_loop(_loop)
-            _proxy = Proxy(url, self._token, self._port, self._bindAddress)
-            _loop.run_until_complete(_proxy.start())
-            try:
-                _loop.run_forever()
-            finally:
-                _loop.close()
-                _loop = None
 
         def getOrCreate(self):
             profile_map = load_profiles()
@@ -240,9 +246,9 @@ class OceanSparkSession(RemoteSparkSession):
                         self._accountId = profile_map[self._profile]["account"]
 
                 if self._jvm:
-                    global _jspark
                     _jspark = SparkSession.builder.master("local[1]") \
-                        .config("spark.jars.repositories", "https://us-central1-maven.pkg.dev/ocean-spark/ocean-spark-adapters") \
+                        .config("spark.jars.repositories",
+                                "https://us-central1-maven.pkg.dev/ocean-spark/ocean-spark-adapters") \
                         .config("spark.jars.packages", "com.netapp.spark:clientplugin:1.2.1") \
                         .config("spark.jars.excludes", "org.glassfish:javax.el,log4j:log4j") \
                         .config("spark.plugins", "com.netapp.spark.SparkConnectWebsocketTranscodePlugin") \
@@ -254,34 +260,48 @@ class OceanSparkSession(RemoteSparkSession):
                         .getOrCreate()
                     SparkContext._active_spark_context = None
                     SparkSession._instantiatedSession = None
-                else:
-                    global _my_thread
-                    if _my_thread is None:
-                        url = f"{self._scheme}://{self._host}/ocean/spark/cluster/{self._clusterId}/app/{self._appId}/connect?accountId={self._accountId}"
-                        _my_thread = threading.Thread(target=self.inverse_websockify, args=(url,))
-                        _my_thread.start()
 
-            url = f"sc://localhost:{self._port}"
-            return OceanSparkSession(url)
+                    channel_builder = OceanChannelBuilder(f"sc://localhost:{self._port}", self._bind_address)
+                    return OceanSparkSession(connection=channel_builder, jspark=_jspark, bind_address=self._bind_address, my_process=None)
+                else:
+                    url = f"{self._scheme}://{self._host}/ocean/spark/cluster/{self._clusterId}/app/{self._appId}/connect?accountId={self._accountId}"
+                    _proxy = Proxy(url, self._token, self._port, self._bind_address)
+                    _process = Process(target=_proxy.inverse_websockify, args=())
+                    _process.start()
+
+                    channel_builder = OceanChannelBuilder(f"sc://localhost:{_proxy.port}", _proxy.addr)
+                    return OceanSparkSession(connection=channel_builder, jspark=None, bind_address=_proxy.addr, my_process=_process)
 
 
 if __name__ == "__main__":
-    spark = None
+    spark_0 = None
+    spark_1 = None
     try:
-        spark = OceanSparkSession.Builder() \
+        spark_0 = OceanSparkSession.Builder() \
             .host("localhost:8091") \
             .scheme("ws") \
-            .port("15003") \
             .cluster_id("osc-739db584") \
-            .appid("spark-hivethrift-6420f-lucid") \
+            .appid("spark-connect-60f4b-teams") \
             .profile("default") \
             .getOrCreate()
-        spark.sql("select random()").show()
+
+        spark_1 = OceanSparkSession.Builder() \
+            .host("localhost:8091") \
+            .scheme("ws") \
+            .cluster_id("osc-739db584") \
+            .appid("spark-connect-60f4b-teams") \
+            .profile("default") \
+            .getOrCreate()
+
+        spark_0.sql("select random()").show()
+        spark_1.sql("select random()").show()
         # spark = OceanSparkSession.Builder().getOrCreate()
         # spark.ai("create a dataframe of random gaussian distributed numbers using pyspark. the length of the new dataframe should be 10000").show()
         # spark.ai("from the jaffle schema, select all columns in the customers table and generate a random gender").show()
         # spark.ai("show me the names of the tables joined with their column names in the jaffle schema").show()
         # asyncio.all_tasks()
     finally:
-        if spark is not None:
-            spark.stop()
+        if spark_0 is not None:
+            spark_0.stop()
+        if spark_1 is not None:
+            spark_1.stop()

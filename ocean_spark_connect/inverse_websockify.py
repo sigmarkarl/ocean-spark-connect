@@ -42,22 +42,32 @@ and configure the client with e.g.
 """
 
 import sys
-
+import os
 import asyncio
 import websockets
 
-from typing import Any, List, Set
+from typing import Any, List
 
 
 class Proxy:
     def __init__(self, url: str, token: str, port: int = 15002, addr: str = "0.0.0.0"):
+        if port == "-1" and not addr.startswith("/"):
+            pid = str(os.getpid())
+            rnd = os.urandom(4).hex()
+            self.addr = f"/tmp/ocean-spark-{pid}-{rnd}.sock"
+        else:
+            self.addr = addr
+
         self.port = port
-        self.addr = addr
         self.token = token
         self.url = url
         self.done = False
-        self.writer = None
         self.loop = None
+
+    def inverse_websockify(self) -> None:
+        self.loop = asyncio.get_event_loop()
+        self.loop.run_until_complete(self.start())
+        self.loop.run_forever()
 
     async def copy(self, reader: Any, writer: Any) -> None:
         while not self.done:
@@ -70,16 +80,14 @@ class Proxy:
 
     async def handle_client(self, r: Any, w: Any) -> None:
         peer = w.get_extra_info("peername")
-        print(f"{peer} connected")
-        self.loop = asyncio.get_event_loop()
         try:
             async with websockets.connect(
                 self.url,
                 subprotocols=None,
                 extra_headers={"Authorization": f"Bearer {self.token}"},
             ) as ws:
-                print(f"{peer} connected to {self.url}")
-                self.wbsct = ws
+                print(f"{peer} connected to {self.url} on {self.addr}:{self.port}")
+
                 def r_reader() -> Any:
                     return r.read(65536)
 
@@ -102,21 +110,11 @@ class Proxy:
         w.close()
         print(f"{peer} closed")
 
-    def stop(self) -> Any:
-        self.done = True
-        if self.loop is not None:
-            if self.writer is not None:
-                self.writer.close()
-            self.loop.stop()
-            self.server = None
-            return None
-        elif self.server is not None:
-            self.server.close()
-            return self.server
-
     async def start(self) -> None:
-        self.server = await asyncio.start_server(self.handle_client, self.addr, self.port)
-        print(f"Listening on {self.addr} port {self.port}")
+        if self.addr.startswith("/"):
+            await asyncio.start_unix_server(self.handle_client, self.addr)
+        else:
+            await asyncio.start_server(self.handle_client, self.addr, self.port)
 
 
 def main(argv: List[str]) -> None:
@@ -144,10 +142,8 @@ def main(argv: List[str]) -> None:
 
     args = parser.parse_args()
 
-    loop = asyncio.get_event_loop()
     proxy = Proxy(args.url, args.token, args.port, args.listen)
-    loop.run_until_complete(proxy.start())
-    loop.run_forever()
+    proxy.inverse_websockify()
 
 
 if __name__ == "__main__":
