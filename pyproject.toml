@@ -1,16 +1,16 @@
 [tool.poetry]
 name = "ocean-spark-connect"
-version = "0.3.4"
+version = "0.3.5"
 description = "Spark Connect adapter for Ocean Spark"
 authors = ["Sigmar Stefansson <sigmar@netapp.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pyspark = "^3.5.0"
+pyspark = "^3.4.0"
 websockets = "^11.0.3"
 pandas = "^2.0.3"
-pyarrow = "^13.0.0"
+pyarrow = "*"
 grpcio = "^1.57.0"
 googleapis-common-protos = "^1.60.0"
 grpcio-status = "^1.57.0"

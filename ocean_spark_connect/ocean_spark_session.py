@@ -283,14 +283,11 @@ if __name__ == "__main__":
             .getOrCreate()
 
         spark_0.sql("select random()").show()
-        spark_0.stop()
         # spark = OceanSparkSession.Builder().getOrCreate()
         # spark.ai("create a dataframe of random gaussian distributed numbers using pyspark. the length of the new dataframe should be 10000").show()
         # spark.ai("from the jaffle schema, select all columns in the customers table and generate a random gender").show()
         # spark.ai("show me the names of the tables joined with their column names in the jaffle schema").show()
         # asyncio.all_tasks()
     finally:
-        print("erm", file=sys.stderr)
-        #    print("erm", file=sys.stderr)
-        #    if spark_0 is not None:
-        #        spark_0.stop()
+        if spark_0 is not None:
+            spark_0.stop()

@@ -91,8 +91,6 @@ class Proxy:
                 def r_reader() -> Any:
                     return r.read(65536)
 
-                self.writer = w
-
                 tcp_to_ws = self.loop.create_task(self.copy(r_reader, ws.send))
                 ws_to_tcp = self.loop.create_task(self.copy(ws.recv, w.write))
                 done, pending = await asyncio.wait(
