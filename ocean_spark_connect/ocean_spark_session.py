@@ -168,6 +168,7 @@ class OceanSparkSession(RemoteSparkSession):
                 self._jspark = None
 
     class Builder(RemoteSparkSession.Builder):
+        _proxy: Proxy = None
         _token: str = None
         _profile: str = None
         _appId: str = None
@@ -229,21 +230,21 @@ class OceanSparkSession(RemoteSparkSession):
                 if self._clusterId is None:
                     raise Exception("clusterId is required")
 
-                if self._token is None:
-                    if self._profile is None:
-                        raise Exception("token or profile is required")
-                    else:
-                        if self._profile not in profile_map:
-                            raise Exception(f"Profile {self._profile} not found")
-                        self._token = profile_map[self._profile]["token"]
+            if self._token is None:
+                if self._profile is None:
+                    raise Exception("token or profile is required")
+                else:
+                    if self._profile not in profile_map:
+                        raise Exception(f"Profile {self._profile} not found")
+                    self._token = profile_map[self._profile]["token"]
 
-                if self._accountId is None:
-                    if self._profile is None:
-                        raise Exception("accountId or profile is required")
-                    else:
-                        if self._profile not in profile_map:
-                            raise Exception(f"Profile {self._profile} not found")
-                        self._accountId = profile_map[self._profile]["account"]
+            if self._accountId is None:
+                if self._profile is None:
+                    raise Exception("accountId or profile is required")
+                else:
+                    if self._profile not in profile_map:
+                        raise Exception(f"Profile {self._profile} not found")
+                    self._accountId = profile_map[self._profile]["account"]
 
                 if self._jvm:
                     _jspark = SparkSession.builder.master("local[1]") \
@@ -272,6 +273,8 @@ class OceanSparkSession(RemoteSparkSession):
                     channel_builder = OceanChannelBuilder(f"sc://localhost:{_proxy.port}", _proxy.addr)
                     return OceanSparkSession(connection=channel_builder, jspark=None, bind_address=_proxy.addr, my_process=_process)
 
+            url = f"sc://localhost:{self._port}"
+            return OceanSparkSession(url)
 
 if __name__ == "__main__":
     spark_0 = None

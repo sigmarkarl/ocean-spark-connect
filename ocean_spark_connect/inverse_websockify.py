@@ -59,6 +59,7 @@ class Proxy:
             self.addr = addr
 
         self.port = port
+        self.addr = addr
         self.token = token
         self.url = url
         self.done = False
@@ -80,6 +81,8 @@ class Proxy:
 
     async def handle_client(self, r: Any, w: Any) -> None:
         peer = w.get_extra_info("peername")
+        print(f"{peer} connected")
+        loop = asyncio.get_event_loop()
         try:
             async with websockets.connect(
                 self.url,
@@ -140,6 +143,7 @@ def main(argv: List[str]) -> None:
 
     args = parser.parse_args()
 
+    loop = asyncio.get_event_loop()
     proxy = Proxy(args.url, args.token, args.port, args.listen)
     proxy.inverse_websockify()
 
