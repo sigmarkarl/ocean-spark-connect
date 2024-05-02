@@ -35,11 +35,6 @@ def load_profiles():
     return profile_map
 
 
-teststr = """
-python -c "from pyspark.sql.types import DoubleType; from pyspark.sql.functions import rand; spark.range(10000).select(rand().alias('value')).toPandas()"
-"""
-
-
 class OceanChannelBuilder(ChannelBuilder):
     def __init__(self, url: str, bind_address: str):
         super().__init__(url)
