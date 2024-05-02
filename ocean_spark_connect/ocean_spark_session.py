@@ -1,13 +1,9 @@
 import multiprocessing
 import os
-import sys
-import subprocess
-import traceback
 from multiprocessing import Process
 
 import grpc
 from pyspark import SparkContext
-from pyspark.sql import DataFrame
 from pyspark.sql.connect.client import ChannelBuilder
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 from pyspark.sql import SparkSession as SparkSession

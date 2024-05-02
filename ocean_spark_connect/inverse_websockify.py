@@ -44,6 +44,7 @@ and configure the client with e.g.
 import sys
 import os
 import asyncio
+import logging
 import websockets
 
 from typing import Any, List
@@ -86,7 +87,7 @@ class Proxy:
                 subprotocols=None,
                 extra_headers={"Authorization": f"Bearer {self.token}"},
             ) as ws:
-                print(f"{peer} connected to {self.url} on {self.addr}:{self.port}")
+                logging.debug(f"{peer} connected to {self.url} on {self.addr}:{self.port}")
 
                 def r_reader() -> Any:
                     return r.read(65536)
@@ -104,9 +105,9 @@ class Proxy:
                 for x in pending:
                     x.cancel()
         except Exception as e:
-            print(f"{peer} exception:", e)
+            logging.error(f"{peer} exception:", e)
         w.close()
-        print(f"{peer} closed")
+        logging.debug(f"{peer} closed")
 
     async def start(self) -> None:
         if self.addr.startswith("/"):
