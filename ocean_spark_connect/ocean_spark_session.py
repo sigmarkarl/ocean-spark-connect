@@ -53,40 +53,6 @@ class OceanChannelBuilder(ChannelBuilder):
         return channel
 
 
-def _run_gh_process(query: str):
-    process = subprocess.Popen(["gh", "copilot", "suggest", "-t", "shell", query + ""], stdout=subprocess.PIPE)
-    cmd = "select random()"
-    while True:
-        line = process.stdout.readline()
-        if not line:
-            break
-        line = line.decode("utf-8").strip()
-        print(line)
-        if line.startswith("# Suggestion:"):
-            line = process.stdout.readline()
-            line = line.decode("utf-8").strip()
-            while line == "":
-                line = process.stdout.readline()
-                line = line.decode("utf-8").strip()
-            total = ""
-            while line != "":
-                total += line + "\n"
-                line = process.stdout.readline()
-                line = line.decode("utf-8").strip()
-
-            cmd = total.strip()
-
-            # if not line.startswith("from ") and not line.startswith("import "):
-            #    if "spark." in line or line.startswith("spark-sql -e ") or line.startswith(
-            #            "SELECT") or line.startswith("select"):
-            print("attempt to parse: " + line)
-        elif "? Select" in line or "Suggestion not readily available" in line:
-            break
-
-    process.terminate()
-    return cmd
-
-
 class OceanSparkSession(RemoteSparkSession):
     def __init__(self, connection: ChannelBuilder,
                  jspark: SparkSession | None,
@@ -96,63 +62,6 @@ class OceanSparkSession(RemoteSparkSession):
         self._jspark = jspark
         self._my_process = my_process
         self._bind_address = bind_address
-
-    def parseCmd(self, cmd: str) -> DataFrame:
-        if cmd.startswith("SELECT ") or cmd.startswith("select "):
-            sql = str.join(" ", cmd.split("\n"))
-            return self.sql(sql)
-        elif cmd.startswith("python -c "):
-            i = cmd.index("python -c ")
-            cmd = cmd[i + 11:-1]
-            return self.parseCmd(cmd)
-        elif "spark." in cmd:
-            if cmd.endswith(".toPandas()"):
-                cmd = cmd[:-11]
-            i = cmd.rindex("spark.")
-            suff = cmd[i:].strip()
-            pref = cmd[:i].strip()
-            if pref != "":
-                # exec(pref)
-                try:
-                    sparkcmd = "self." + suff[6:]
-                    # df = self.eval(sparkcmd)
-                    df = eval(sparkcmd)
-                    if type(df).__name__ == 'DataFrame':
-                        return df
-                    else:
-                        raise Exception("The result of the command is not a pyspark dataframe")
-                except Exception as e:
-                    _, _, tb = sys.exc_info()
-                    traceback.print_tb(tb)  # Fixed format
-                    tb_info = traceback.extract_tb(tb)
-                    filename, line, func, text = tb_info[-1]
-
-                    print('An error occurred on line {} in statement {}'.format(line, text))
-                    exit(1)
-                    # print(f"error running command {cmd}: {e}")
-                    # raise e
-            cmd = "self." + suff[6:]
-        elif cmd.startswith("spark-sql -e "):
-            sql = cmd[14:-1]
-            return self.sql(sql)
-
-        print(f"about to run command {cmd}")
-        try:
-            df = eval(cmd)
-            if type(df).__name__ == 'DataFrame':
-                return df
-            else:
-                raise Exception("The result of the command is not a pyspark dataframe")
-        except Exception as e:
-            print(f"error running command {cmd}: {e}")
-            raise e
-
-    def ai(self, query: str) -> DataFrame:
-        cmd = teststr.strip()  # self._run_gh_process(query)
-        if cmd != "":
-            return self.parseCmd(cmd)
-        else:
-            raise Exception("Empty ai suggestion")
 
     def stop(self):
         try:
@@ -271,23 +180,3 @@ class OceanSparkSession(RemoteSparkSession):
 
                     channel_builder = OceanChannelBuilder(f"sc://localhost:{_proxy.port}", _proxy.addr)
                     return OceanSparkSession(connection=channel_builder, jspark=None, bind_address=_proxy.addr, my_process=_process)
-
-
-if __name__ == "__main__":
-    spark_0 = None
-    try:
-        spark_0 = OceanSparkSession.Builder() \
-            .cluster_id("osc-739db584") \
-            .appid("spark-connect-40982-foxes") \
-            .profile("default") \
-            .getOrCreate()
-
-        spark_0.sql("select random()").show()
-        # spark = OceanSparkSession.Builder().getOrCreate()
-        # spark.ai("create a dataframe of random gaussian distributed numbers using pyspark. the length of the new dataframe should be 10000").show()
-        # spark.ai("from the jaffle schema, select all columns in the customers table and generate a random gender").show()
-        # spark.ai("show me the names of the tables joined with their column names in the jaffle schema").show()
-        # asyncio.all_tasks()
-    finally:
-        if spark_0 is not None:
-            spark_0.stop()
