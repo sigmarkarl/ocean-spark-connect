@@ -40,7 +40,7 @@ class OceanChannelBuilder(ChannelBuilder):
         if self._bind_address.startswith("/"):
             channel = grpc.insecure_channel("unix://" + self._bind_address)
         else:
-            channel = grpc.insecure_channel(self.url)
+            channel = super().toChannel()
         return channel
 
 
@@ -146,10 +146,13 @@ class OceanSparkSession(RemoteSparkSession):
                         self._accountId = profile_map[self._profile]["account"]
 
                 if self._jvm:
+                    if self._port == "-1":
+                        self._port = "15002"
+
                     _jspark = SparkSession.builder.master("local[1]") \
                         .config("spark.jars.repositories",
                                 "https://us-central1-maven.pkg.dev/ocean-spark/ocean-spark-adapters") \
-                        .config("spark.jars.packages", "com.netapp.spark:clientplugin:1.2.1") \
+                        .config("spark.jars.packages", "com.netapp.spark:clientplugin:1.4.1") \
                         .config("spark.jars.excludes", "org.glassfish:javax.el,log4j:log4j") \
                         .config("spark.plugins", "com.netapp.spark.SparkConnectWebsocketTranscodePlugin") \
                         .config("spark.code.submission.clusterId", f"{self._clusterId}") \
