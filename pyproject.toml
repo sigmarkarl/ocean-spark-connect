@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "ocean-spark-connect"
+name = "ocean-sparkconnect"
 version = "0.3.6"
 description = "Spark Connect adapter for Ocean Spark"
 authors = ["Sigmar Stefansson <sigmar@netapp.com>"]
@@ -16,7 +16,7 @@ googleapis-common-protos = "^1.60.0"
 grpcio-status = "^1.57.0"
 
 [tool.setuptools.packages.find]
-where = ["ocean_spark_connect"]
+where = ["ocean_sparkconnect"]
 
 [build-system]
 requires = ["poetry-core"]
