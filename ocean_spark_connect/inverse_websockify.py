@@ -51,14 +51,15 @@ from typing import Any, List
 
 
 class Proxy:
-    def __init__(self, url: str, token: str, port: int = 15002, addr: str = "0.0.0.0"):
-        if port == "-1" and not addr.startswith("/"):
+    def __init__(self, url: str, token: str, port: int = 15002, addr: str = "0.0.0.0", ping_interval: float = -1.0):
+        if port == -1 and not addr.startswith("/"):
             pid = str(os.getpid())
             rnd = os.urandom(4).hex()
             self.addr = f"/tmp/ocean-spark-{pid}-{rnd}.sock"
         else:
             self.addr = addr
 
+        self.ping_interval = ping_interval
         self.port = port
         self.token = token
         self.url = url
@@ -79,6 +80,11 @@ class Proxy:
             if future:
                 await future
 
+    async def ping(self, ws: Any) -> None:
+        while not self.done:
+            await asyncio.sleep(self.ping_interval)
+            await ws.ping()
+
     async def handle_client(self, r: Any, w: Any) -> None:
         peer = w.get_extra_info("peername")
         try:
@@ -94,8 +100,14 @@ class Proxy:
 
                 tcp_to_ws = self.loop.create_task(self.copy(r_reader, ws.send))
                 ws_to_tcp = self.loop.create_task(self.copy(ws.recv, w.write))
+
+                task_list = [tcp_to_ws, ws_to_tcp]
+                if self.ping_interval > 0:
+                    ping_task = self.loop.create_task(self.ping(ws))
+                    task_list.append(ping_task)
+
                 done, pending = await asyncio.wait(
-                    [tcp_to_ws, ws_to_tcp], return_when=asyncio.FIRST_COMPLETED
+                    task_list, return_when=asyncio.FIRST_COMPLETED
                 )
                 for x in done:
                     try:

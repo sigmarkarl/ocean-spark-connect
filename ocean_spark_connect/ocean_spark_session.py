@@ -73,53 +73,58 @@ class OceanSparkSession(RemoteSparkSession):
         _appId: str = None
         _accountId = None
         _clusterId = None
+        _ping_interval: float = -1.0
         _jvm = False
         _channel_builder = False
         _scheme = "wss"
         _host = "api.spotinst.io"
-        _port = "-1"
+        _port = -1
         _bind_address = "0.0.0.0"
 
         def __init__(self):
             super().__init__()
 
-        def use_java(self, value):
+        def use_java(self, value: bool):
             self._jvm = value
             return self
 
-        def appid(self, value):
+        def ping_interval(self, value: float):
+            self._ping_interval = value
+            return self
+
+        def appid(self, value: str):
             self._appId = value
             return self
 
-        def token(self, value):
+        def token(self, value: str):
             self._token = value
             return self
 
-        def profile(self, value):
+        def profile(self, value: str):
             self._profile = value
             return self
 
-        def cluster_id(self, value):
+        def cluster_id(self, value: str):
             self._clusterId = value
             return self
 
-        def account_id(self, value):
+        def account_id(self, value: str):
             self._accountId = value
             return self
 
-        def port(self, value):
+        def port(self, value: int):
             self._port = value
             return self
 
-        def bind_address(self, value):
+        def bind_address(self, value: str):
             self._bind_address = value
             return self
 
-        def host(self, value):
+        def host(self, value: str):
             self._host = value
             return self
 
-        def scheme(self, value):
+        def scheme(self, value: str):
             self._scheme = value
             return self
 
@@ -146,8 +151,8 @@ class OceanSparkSession(RemoteSparkSession):
                         self._accountId = profile_map[self._profile]["account"]
 
                 if self._jvm:
-                    if self._port == "-1":
-                        self._port = "15002"
+                    if self._port == -1:
+                        self._port = 15002
 
                     _jspark = SparkSession.builder.master("local[1]") \
                         .config("spark.jars.repositories",
@@ -168,7 +173,7 @@ class OceanSparkSession(RemoteSparkSession):
                     return OceanSparkSession(connection=channel_builder, jspark=_jspark, bind_address=self._bind_address, my_process=None)
                 else:
                     url = f"{self._scheme}://{self._host}/ocean/spark/cluster/{self._clusterId}/app/{self._appId}/connect?accountId={self._accountId}"
-                    _proxy = Proxy(url, self._token, self._port, self._bind_address)
+                    _proxy = Proxy(url, self._token, self._port, self._bind_address, self._ping_interval)
                     _process = Process(target=_proxy.inverse_websockify, args=())
                     _process.start()
 
