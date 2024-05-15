@@ -1,4 +1,4 @@
-# ocean-sparkconnect
+# ocean-spark-connect
 ## Wrapper to create Spark Connect session for Spark Applications in Ocean
 
 ```
@@ -8,6 +8,20 @@ spark = OceanSparkSession.Builder().cluster_id("osc-cluster").appid("appid").pro
 spark.sql("select random()").show()
 spark.stop()
 ```
+
+To use periodic ping to keep the session alive, use the ping_interval option (in seconds). 
+The default value is off (-1).
+
+```
+spark = OceanSparkSession.Builder() \
+    .ping_interval(5.0) \
+    .cluster_id("osc-cluster") \
+    .appid("appid") \
+    .profile("default") \
+    .getOrCreate()
+```
+
+To use java Spark plugin for the websocket bridge instead, add the use_java(True) option.
 
 ### Options for OceanSparkSession.Builder with and without default values
 
