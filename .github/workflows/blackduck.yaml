@@ -1,0 +1,52 @@
+name: Blackduck
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '00 12 * * 1'
+
+jobs:
+  scan:
+    runs-on: [self-hosted-ofas, dev]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'oracle'
+
+    - name: Run Blackduck Scan
+      env:
+        PROJECT_NAME: "ocean-spark-connect"
+        VERSION_NAME: "current"
+        BLACKDUCK_URL: "https://blackduck.eng.netapp.com"
+        API_TOKEN: ${{ secrets.OFAS_BLACKDUCK_API_TOKEN }}
+        SOURCE_PATH: "/runner/_work/ocean-spark-connect/"
+        CODE_LOCATION_NAME: "${{ env.PROJECT_NAME }}_${{ env.VERSION_NAME }}_code"
+        https_proxy: "http://dc-pxy-asp-sqd-inf-a-49483f45b44c48c3.elb.us-east-1.amazonaws.com:3128"
+        http_proxy: "http://dc-pxy-asp-sqd-inf-a-49483f45b44c48c3.elb.us-east-1.amazonaws.com:3128"
+        no_proxy: "127.0.0.1,::1,localhost,.cls.eng.netapp.com,.synopsys.com"
+      run: |
+        bash <(curl -s https://detect.synopsys.com/detect9.sh) -d \
+            --detect.project.name=${PROJECT_NAME} \
+            --detect.project.version.name=${VERSION_NAME} \
+            --blackduck.url=${BLACKDUCK_URL} \
+            --blackduck.proxy.host="dc-pxy-asp-sqd-inf-a-49483f45b44c48c3.elb.us-east-1.amazonaws.com" \
+            --blackduck.proxy.port=3128 \
+            --blackduck.trust.cert=true \
+            --blackduck.api.token=${API_TOKEN} \
+            --detect.cleanup=false \
+            --detect.diagnostic=true \
+            --detect.source.path=${SOURCE_PATH} \
+            --detect.blackduck.signature.scanner.paths=${SOURCE_PATH} \
+            --detect.code.location.name="${{ env.PROJECT_NAME }}_${{ env.VERSION_NAME }}_code" \
+            --detect.detector.search.continue=true \
+            --detect.excluded.directories.search.depth=500 \
+            --detect.blackduck.signature.scanner.upload.source.mode=false
